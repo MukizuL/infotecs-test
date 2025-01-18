@@ -8,10 +8,10 @@ import (
 	"log"
 )
 
-var ErrNotEnoughMoney = errors.New("недостаточно средств")
-var ErrWrongSender = errors.New("нет такого отправителя")
-var ErrWrongReceiver = errors.New("нет такого получателя")
-var ErrPurseNotFound = errors.New("нет такого кошелька")
+var ErrNotEnoughMoney = errors.New("storage: недостаточно средств")
+var ErrWrongSender = errors.New("storage: нет такого отправителя")
+var ErrWrongReceiver = errors.New("storage: нет такого получателя")
+var ErrPurseNotFound = errors.New("storage: нет такого кошелька")
 
 type Purse struct {
 	Id      uuid.UUID
@@ -30,6 +30,8 @@ type StorageConn struct {
 	DB *sql.DB
 }
 
+// Init Функция инициализирует базу данных, создаёт таблицы purses и transactions.
+// Также создаёт 10 произвольных кошельков с балансом 100 у.е.
 func (s *StorageConn) Init() {
 	purses, transactions := false, false
 	stmt := `SELECT table_name
@@ -110,6 +112,12 @@ CREATE TABLE transactions (
 	}
 }
 
+// Send Функция производит перевод средств между двумя кошельками.
+// Возвращает ошибку при любом неуспехе.
+//
+// Примечания:
+// - Баланс хранится в целых числах для предотвращения проблем с округлением.
+// - Функция предполагает, что передаваемые UUID и суммы валидны.
 func (s *StorageConn) Send(src, dst uuid.UUID, amount float64) error {
 	tx, err := s.DB.BeginTx(context.Background(), nil)
 	if err != nil {
@@ -120,16 +128,24 @@ func (s *StorageConn) Send(src, dst uuid.UUID, amount float64) error {
 	stmt := `SELECT balance FROM purses WHERE id = $1`
 	err = tx.QueryRow(stmt, src).Scan(&srcBalance)
 	if err != nil {
-		tx.Rollback()
-		return ErrWrongSender
+		if errors.Is(err, sql.ErrNoRows) {
+			tx.Rollback()
+			return ErrWrongSender
+		}
+
+		return err
 	}
 
 	var dstBalance int
 	stmt = `SELECT balance FROM purses WHERE id = $1`
 	err = tx.QueryRow(stmt, dst).Scan(&dstBalance)
 	if err != nil {
-		tx.Rollback()
-		return ErrWrongReceiver
+		if errors.Is(err, sql.ErrNoRows) {
+			tx.Rollback()
+			return ErrWrongReceiver
+		}
+
+		return err
 	}
 
 	if srcBalance-int(amount*100) < 0 {
@@ -164,6 +180,7 @@ func (s *StorageConn) Send(src, dst uuid.UUID, amount float64) error {
 	return nil
 }
 
+// GetLast Функция возвращает n последних операций из таблицы transactions.
 func (s *StorageConn) GetLast(n int) ([]Transaction, error) {
 	res := make([]Transaction, 0, 10)
 
@@ -187,6 +204,7 @@ func (s *StorageConn) GetLast(n int) ([]Transaction, error) {
 	return res, nil
 }
 
+// GetBalance Функция возвращает id и баланс кошелька в структуре.
 func (s *StorageConn) GetBalance(id uuid.UUID) (Purse, error) {
 	var p Purse
 	p.Id = id
@@ -194,7 +212,11 @@ func (s *StorageConn) GetBalance(id uuid.UUID) (Purse, error) {
 	stmt := `SELECT balance FROM purses WHERE id = $1`
 	err := s.DB.QueryRow(stmt, id).Scan(&p.Balance)
 	if err != nil {
-		return Purse{}, ErrPurseNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			return Purse{}, ErrPurseNotFound
+		}
+
+		return Purse{}, err
 	}
 
 	p.Balance = p.Balance / 100

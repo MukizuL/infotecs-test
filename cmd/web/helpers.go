@@ -9,6 +9,7 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// WriteJSON Обёртывает всё в виде JSON-объекта.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

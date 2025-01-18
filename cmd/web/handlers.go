@@ -59,7 +59,7 @@ func (app *application) send(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// Функция получает количество транзакций и возвращает такое количество транзакций.
+// Функция получает число и возвращает такое количество транзакций.
 func (app *application) getLast(w http.ResponseWriter, r *http.Request) {
 	num, err := strconv.ParseInt(r.URL.Query().Get("count"), 10, 64)
 	if err != nil {
@@ -115,7 +115,8 @@ func (app *application) getBalance(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-// Функция проверяет правильность кошелка отправителя и получателя, также проверяет сумму перевода на соответствие правилам
+// Функция проверяет правильность кошелка отправителя и получателя,
+// также проверяет сумму перевода на соответствие правилам
 func validateSendRequest(request *sendRequest) error {
 	if _, err := uuid.Parse(request.Sender); err != nil {
 		return ErrNotValidSender
